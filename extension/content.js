@@ -711,7 +711,7 @@
 
   function buildApiUrl() {
     const url = new URL(API_PATH, location.origin);
-    url.searchParams.set('sortedBy', 'publishedAt');
+    url.searchParams.set('sortedBy', 'sort_timestamp');
     url.searchParams.set('sortOrder', mode === 'oldest-all' ? 'asc' : 'desc');
     url.searchParams.set('page', String(globalState.page));
     url.searchParams.set('limit', String(PAGE_SIZE));
@@ -719,6 +719,9 @@
     for (const pair of filters) {
       url.searchParams.append(pair[0], pair[1]);
     }
+    // The API hides lower-ranked matches by default. Emploitic's own search
+    // results include them, so keep accented or broad queries from looking empty.
+    if (filters.has('q')) url.searchParams.set('rankingScoreThreshold', '0');
     return url;
   }
 
