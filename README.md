@@ -7,9 +7,9 @@ https://emploitic.com/offres-d-emploi
 
 ## Why I built this
 
-The site has no date sort, and featured offers are mixed with normal results.
+The site has no date sort, which makes it inconvenient looking for recent listing. 
 I wanted to see the newest or oldest offers, including across all pages, without
-downloading the entire job list at once.
+searching page by page.
 
 ## Install
 
