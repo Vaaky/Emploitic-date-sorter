@@ -18,6 +18,8 @@
   const MODE_KEY = 'emploitic-sort-mode';
   const CACHE_TTL = 60 * 1000;
   const PAGE_SIZE = 20;
+  const CLIENT_SORT_LIMIT = 1000;
+  const CLIENT_SORT_MAX = 10000;
   const API_PATH = '/api/v4/jobboard/jobs/search';
   const LOGO_PROXY_WIDTH = 128;
   const EMPTY_LOGO_PATH = '/images/comany_empty_logo.png';
@@ -67,7 +69,8 @@
     reqSeq: 0,
     template: null,
     hrTemplate: null,
-    suspended: false
+    suspended: false,
+    allOffers: null
   };
 
   const dateFormatter = (() => {
@@ -709,20 +712,35 @@
     return out;
   }
 
-  function buildApiUrl() {
+  function buildApiUrl(page, limit) {
     const url = new URL(API_PATH, location.origin);
-    url.searchParams.set('sortedBy', 'sort_timestamp');
+    url.searchParams.set('sortedBy', 'publishedAt');
     url.searchParams.set('sortOrder', mode === 'oldest-all' ? 'asc' : 'desc');
-    url.searchParams.set('page', String(globalState.page));
-    url.searchParams.set('limit', String(PAGE_SIZE));
+    url.searchParams.set('page', String(page || globalState.page));
+    url.searchParams.set('limit', String(limit || PAGE_SIZE));
     const filters = apiFilterParams();
     for (const pair of filters) {
       url.searchParams.append(pair[0], pair[1]);
     }
-    // The API hides lower-ranked matches by default. Emploitic's own search
-    // results include them, so keep accented or broad queries from looking empty.
+    // v1.3.1 behavior: include all matches, including lower-ranked ones.
     if (filters.has('q')) url.searchParams.set('rankingScoreThreshold', '0');
     return url;
+  }
+
+  function publicationTime(offer) {
+    const time = Date.parse(offer && offer.publishedAt ? offer.publishedAt : '');
+    return Number.isFinite(time) ? time : 0;
+  }
+
+  function sortOffersByDate(offers) {
+    const ascending = mode === 'oldest-all';
+    return offers.slice().sort((a, b) => {
+      const diff = publicationTime(a) - publicationTime(b);
+      if (diff) return ascending ? diff : -diff;
+      const aId = String((a && (a.id || a.alias)) || '');
+      const bId = String((b && (b.id || b.alias)) || '');
+      return aId < bId ? -1 : aId > bId ? 1 : 0;
+    });
   }
 
   function captureTemplates() {
@@ -1094,6 +1112,58 @@
     goToGlobalPage(parseInt(target.value, 10));
   }
 
+  async function fetchJobs(url) {
+    const response = await fetch(url.toString(), {
+      credentials: 'same-origin',
+      headers: { accept: 'application/json' }
+    });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    return response.json();
+  }
+
+  function applyClientSortedPage(page) {
+    const all = globalState.allOffers || [];
+    globalState.total = all.length;
+    globalState.totalPages = all.length ? Math.ceil(all.length / PAGE_SIZE) : 0;
+    const target = Math.min(globalState.totalPages || 1, Math.max(1, page));
+    globalState.page = target;
+    const start = (target - 1) * PAGE_SIZE;
+    globalState.offers = all.slice(start, start + PAGE_SIZE);
+  }
+
+  async function fetchAllSortedOffers(seq) {
+    const collected = [];
+    let total = 0;
+    let page = 1;
+    let totalPages = 1;
+
+    do {
+      const json = await fetchJobs(buildApiUrl(page, CLIENT_SORT_LIMIT));
+      if (seq !== globalState.reqSeq) return null;
+      total = Number(json.total) || total;
+      totalPages = Number(json.totalPages) || 1;
+      if (total > CLIENT_SORT_MAX) {
+        throw new Error('Trop de résultats pour trier localement (' + formatNumber(total) + ')');
+      }
+      const batch = Array.isArray(json.data) ? json.data : [];
+      if (!batch.length) break;
+      collected.push.apply(collected, batch);
+      page += 1;
+    } while (page <= totalPages && collected.length < total);
+
+    const seen = new Set();
+    const unique = [];
+    collected.forEach((offer, index) => {
+      const key = offer && (offer.id || offer.alias)
+        ? String(offer.id || offer.alias)
+        : 'row-' + index;
+      if (seen.has(key)) return;
+      seen.add(key);
+      unique.push(offer);
+    });
+    return sortOffersByDate(unique);
+  }
+
   async function loadGlobal(page) {
     const max = globalState.totalPages || Infinity;
     const target = Math.min(max, Math.max(1, Math.round(Number(page) || 1)));
@@ -1107,22 +1177,15 @@
     ensureGlobalView();
     updateGlobalStatus();
 
-    const apiUrl = buildApiUrl();
     try {
-      const response = await fetch(apiUrl.toString(), {
-        credentials: 'same-origin',
-        headers: { accept: 'application/json' }
-      });
-      if (!response.ok) throw new Error('HTTP ' + response.status);
-      const json = await response.json();
-      if (seq !== globalState.reqSeq) return;
-
-      globalState.offers = Array.isArray(json.data) ? json.data : [];
-      globalState.total = Number(json.total) || 0;
-      globalState.totalPages = Number(json.totalPages) ||
-        (globalState.offers.length ? 1 : 0);
-      const current = Number(json.currentPage);
-      if (current >= 1) globalState.page = current;
+      if (globalState.allOffers) {
+        applyClientSortedPage(target);
+      } else {
+        const all = await fetchAllSortedOffers(seq);
+        if (seq !== globalState.reqSeq || all === null) return;
+        globalState.allOffers = all;
+        applyClientSortedPage(target);
+      }
       globalState.loading = false;
       globalState.error = '';
       globalState.version++;
@@ -1144,6 +1207,7 @@
     globalState.suspended = false;
     globalState.page = 1;
     globalState.offers = [];
+    globalState.allOffers = null;
     globalState.total = 0;
     globalState.totalPages = 0;
     globalState.loading = false;
@@ -1167,6 +1231,7 @@
     globalState.loading = false;
     globalState.error = '';
     globalState.offers = [];
+    globalState.allOffers = null;
     globalState.total = 0;
     globalState.totalPages = 0;
     globalState.page = 1;
@@ -1179,6 +1244,7 @@
     globalState.suspended = false;
     globalState.page = 1;
     globalState.offers = [];
+    globalState.allOffers = null;
     globalState.total = 0;
     globalState.totalPages = 0;
     globalState.loading = false;
