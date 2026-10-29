@@ -1,7 +1,8 @@
 /*
  * Emploitic – tri par date de publication
- * Ajoute un sélecteur « Trier par date » au-dessus de la liste des offres. VAAAAAAAAAAAAAAAAAAK
- * Deux portées : la page affichée, ou toutes les pages via l'API publique.
+ * Ajoute un sélecteur « Trier par date » au-dessus de la liste des offres.
+ * Deux portées : la page affichée, ou toutes les pages via les endpoints internes.
+ * SPDX-License-Identifier: GPL-3.0-only
  */
 (() => {
   'use strict';
@@ -65,7 +66,8 @@
     version: 0,
     reqSeq: 0,
     template: null,
-    hrTemplate: null
+    hrTemplate: null,
+    suspended: false
   };
 
   const dateFormatter = (() => {
@@ -612,7 +614,7 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* Vue globale : API Emploitic, toutes les pages                       */
+  /* Vue globale : endpoints internes Emploitic, toutes les pages          */
   /* ------------------------------------------------------------------ */
 
   function isListingPage() {
@@ -622,6 +624,11 @@
     if (/^\/offres-d-emploi\/(region|fonction|secteur)\/[^/]+$/.test(path)) return true;
     if (/^\/entreprises\/[^/]+\/offres-d-emploi$/.test(path)) return true;
     return !!document.querySelector('[data-testid="all-job-tab"]');
+  }
+
+  function recommendedTabSelected() {
+    const tab = document.querySelector('[data-testid="recommended-jobs-tab"]');
+    return !!(tab && tab.getAttribute('aria-selected') === 'true');
   }
 
   function paramValues(params, key) {
@@ -898,6 +905,10 @@
       removeGlobalUi();
       return null;
     }
+    if (globalState.suspended || recommendedTabSelected()) {
+      removeGlobalUi();
+      return null;
+    }
     const list = listEl();
     if (!list || !list.parentElement || !document.body) {
       removeGlobalUi();
@@ -917,6 +928,7 @@
         container.getAttribute('data-empl-version') !== String(globalState.version)) {
       renderGlobalView(container);
     }
+    updateGlobalStatus();
     return container;
   }
 
@@ -1126,6 +1138,7 @@
   function enterGlobalMode() {
     if (!isGlobalMode(mode)) return;
     globalState.reqSeq += 1;
+    globalState.suspended = false;
     globalState.page = 1;
     globalState.offers = [];
     globalState.total = 0;
@@ -1147,6 +1160,7 @@
 
   function exitGlobalMode() {
     globalState.reqSeq += 1;
+    globalState.suspended = false;
     globalState.loading = false;
     globalState.error = '';
     globalState.offers = [];
@@ -1159,6 +1173,7 @@
   function onGlobalUrlChange() {
     if (!isGlobalMode(mode)) return;
     globalState.reqSeq += 1;
+    globalState.suspended = false;
     globalState.page = 1;
     globalState.offers = [];
     globalState.total = 0;
@@ -1180,6 +1195,12 @@
   function updateGlobalStatus() {
     const el = document.getElementById(STATUS_ID);
     if (!el) return;
+    if (globalState.suspended || recommendedTabSelected()) {
+      setText(el, 'Vue « Pour toi »');
+      const pausedTitle = 'Le tri global reprend quand vous revenez à « Toutes ».';
+      if (el.title !== pausedTitle) el.title = pausedTitle;
+      return;
+    }
     if (globalState.loading) {
       setText(el, 'Chargement des offres…');
     } else if (globalState.error) {
@@ -1189,7 +1210,7 @@
     } else {
       setText(el, 'Aucune offre');
     }
-    const title = 'Tri appliqué à toutes les pages (API Emploitic).';
+    const title = 'Tri appliqué à toutes les pages (endpoints internes Emploitic).';
     if (el.title !== title) el.title = title;
   }
 
@@ -1215,9 +1236,6 @@
 
       body.empl-global-mode [data-testid="jobs-list"],
       body.empl-global-mode [data-testid="jobs-footer-section"]{display:none!important}
-      body.empl-global-mode .MuiTabs-root,
-      body.empl-global-mode [data-testid="all-job-tab"],
-      body.empl-global-mode [data-testid="recommended-jobs-tab"]{display:none!important}
 
       #${GLOBAL_ID}{display:block;background:#fff;font-family:inherit}
       #${GLOBAL_ID} .empl-g-top{display:flex;align-items:center;justify-content:space-between;
@@ -1359,6 +1377,27 @@
     if (mode !== 'default') refreshDates();
   }
 
+  function onDocumentClick(event) {
+    if (!isGlobalMode(mode)) return;
+    const target = event.target instanceof Element
+      ? event.target
+      : (event.target && event.target.parentElement);
+    if (!target || !target.closest) return;
+
+    if (target.closest('[data-testid="recommended-jobs-tab"]')) {
+      globalState.suspended = true;
+      removeGlobalUi();
+      updateGlobalStatus();
+      return;
+    }
+
+    if (target.closest('[data-testid="all-job-tab"]')) {
+      globalState.suspended = false;
+      updateGlobalStatus();
+      scheduleApply();
+    }
+  }
+
   /* ------------------------------------------------------------------ */
   /* Préférence                                                          */
   /* ------------------------------------------------------------------ */
@@ -1371,18 +1410,55 @@
     let finished = false;
     const finish = (value) => {
       if (finished) return;
+      let next = value;
+      if (next == null) {
+        try {
+          next = localStorage.getItem(MODE_KEY);
+        } catch (e) {
+          /* ignore */
+        }
+      }
       finished = true;
-      callback(validMode(value));
+      callback(validMode(next));
     };
 
+    let area = null;
     try {
-      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
-        chrome.storage.sync.get(MODE_KEY, (result) => finish(result && result[MODE_KEY]));
-        setTimeout(() => finish(undefined), 1200);
-        return;
+      if (typeof browser !== 'undefined' && browser.storage && browser.storage.sync) {
+        area = browser.storage.sync;
       }
     } catch (e) {
       /* ignore */
+    }
+    if (!area) {
+      try {
+        if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
+          area = chrome.storage.sync;
+        }
+      } catch (e) {
+        /* ignore */
+      }
+    }
+
+    if (area && typeof area.get === 'function') {
+      try {
+        const maybe = area.get(MODE_KEY);
+        if (maybe && typeof maybe.then === 'function') {
+          maybe.then((result) => finish(result && result[MODE_KEY]))
+            .catch(() => finish(undefined));
+          setTimeout(() => finish(undefined), 1200);
+          return;
+        }
+      } catch (e) {
+        /* fall back to the callback API below */
+      }
+      try {
+        area.get(MODE_KEY, (result) => finish(result && result[MODE_KEY]));
+        setTimeout(() => finish(undefined), 1200);
+        return;
+      } catch (e) {
+        /* fall back to localStorage */
+      }
     }
 
     try {
@@ -1393,12 +1469,31 @@
   }
 
   function saveMode(value) {
+    let area = null;
     try {
-      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
-        chrome.storage.sync.set({ [MODE_KEY]: value });
+      if (typeof browser !== 'undefined' && browser.storage && browser.storage.sync) {
+        area = browser.storage.sync;
       }
     } catch (e) {
       /* ignore */
+    }
+    if (!area) {
+      try {
+        if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
+          area = chrome.storage.sync;
+        }
+      } catch (e) {
+        /* ignore */
+      }
+    }
+
+    if (area && typeof area.set === 'function') {
+      try {
+        const maybe = area.set({ [MODE_KEY]: value });
+        if (maybe && typeof maybe.catch === 'function') maybe.catch(() => {});
+      } catch (e) {
+        /* ignore */
+      }
     }
     try {
       localStorage.setItem(MODE_KEY, value);
@@ -1449,6 +1544,7 @@
   }
 
   function boot() {
+    document.addEventListener('click', onDocumentClick, true);
     observe();
 
     loadMode((saved) => {

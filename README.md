@@ -1,7 +1,8 @@
 # Emploitic Date Sorter (Unofficial)
 
-A small Chrome/Edge extension and Tampermonkey userscript that adds a
-**sort by publication date** option to Emploitic's job list:
+A small extension and Tampermonkey userscript that adds a **sort by publication
+date** option to Emploitic's job list:
+
 https://emploitic.com/offres-d-emploi
 
 ## Why I built this
@@ -10,19 +11,12 @@ The site has no date sort, and featured offers are mixed with normal results.
 I wanted to see the newest or oldest offers, including across all pages, without
 downloading the entire job list at once.
 
-## How it works
-
-- **Cette page** reorders the 20 cards currently displayed.
-- **Toutes les pages** shows a paginated global view, 20 offers per page.
-
-The global view uses the same internal HTTP endpoints as Emploitic's own frontend,
-not an official public API
-
 ## Install
 
-**Chrome / Edge**
+**Chrome / Edge / Brave / Opera (Chromium)**
 
-1. Open `chrome://extensions` or `edge://extensions`.
+1. Open `chrome://extensions`, `edge://extensions`, `brave://extensions`, or
+   `opera://extensions`.
 2. Enable **Developer mode**.
 3. Click **Load unpacked** and select the `extension` folder.
 4. Reload https://emploitic.com/offres-d-emploi.
@@ -38,7 +32,7 @@ not an official public API
 - This is an unofficial project, not affiliated with Emploitic.
 - It requests 20 offers at a time and does not bulk-download the full list.
 - Only the selected sort mode is stored; no personal data is collected.
-- Keyword search counts may differ slightly from the site's own results.
+
 
 ## License
 
