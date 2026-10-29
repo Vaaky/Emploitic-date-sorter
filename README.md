@@ -21,7 +21,7 @@ downloading the entire job list at once.
 3. Click **Load unpacked** and select the `extension` folder.
 4. Reload https://emploitic.com/offres-d-emploi.
 
-**Tampermonkey / Violentmonkey**
+**OR Tampermonkey / Violentmonkey**
 
 1. Create a new userscript.
 2. Paste the contents of `emploitic-date-sort.user.js`.
