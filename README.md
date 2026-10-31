@@ -18,20 +18,7 @@ downloading the entire job list at once.
 - The native **Toutes / Pour toi** tabs stay visible in the global view.
   Clicking **Pour toi** pauses the global view; **Toutes** resumes it.
 
-The global view uses the same internal HTTP endpoints as Emploitic's own
-frontend, not an official public API:
 
-```http
-GET /api/v4/jobboard/jobs/search?sortedBy=publishedAt&sortOrder=desc&page=1&limit=20
-```
-
-For the global view, the extension loads all matching results in batches of
-1,000 (up to 10,000), deduplicates them, sorts the complete set by publication
-date, and paginates locally. Search requests use v1.3.1's
-`rankingScoreThreshold=0` so all matching offers are included.
-
-It also reads `/_next/data/...` for exact dates and `/_next/image?...` for logos.
-These endpoints can change, be rate-limited, or stop working at any time.
 
 ## Install
 
@@ -42,16 +29,6 @@ These endpoints can change, be rate-limited, or stop working at any time.
 2. Enable **Developer mode**.
 3. Click **Load unpacked** and select the `extension` folder.
 4. Reload https://emploitic.com/offres-d-emploi.
-
-**Firefox 140+**
-
-1. Open `about:debugging#/runtime/this-firefox`.
-2. Click **Load Temporary Add-on**.
-3. Select `extension-firefox/manifest.json`.
-4. Reload https://emploitic.com/offres-d-emploi.
-
-For a permanent Firefox install, the add-on must be signed through
-[addons.mozilla.org](https://addons.mozilla.org/).
 
 **Tampermonkey / Violentmonkey**
 
