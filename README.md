@@ -18,8 +18,8 @@ downloading the entire job list at once.
 - The native **Toutes / Pour toi** tabs stay visible in the global view.
   Clicking **Pour toi** pauses the global view; **Toutes** resumes it.
 
-## The best way to use the extension is to combine it with the website's sidebar filters. Keyword searches may initially return unrelated job listings because the website ranks results by relevance (weighted search), 
-## rather than publication date. Since the extension sorts listings by date instead of relevance, those unrelated results may appear at the top.
+ The best way to use the extension is to combine it with the website's sidebar filters. Keyword searches may initially return unrelated job listings because the website ranks results by relevance (weighted search), 
+ rather than publication date. Since the extension sorts listings by date instead of relevance, those unrelated results may appear at the top.
 
 ## Install
 
